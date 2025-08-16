@@ -42,10 +42,17 @@ const Navigation: React.FC = () => {
 
   const handleNavClick = (href: string) => {
     const targetId = href.substring(1);
-    const element = document.getElementById(targetId);
     
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth' });
+    if (targetId === 'hero') {
+      // For home/hero section, scroll to the very top
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+      const element = document.getElementById(targetId);
+      if (element) {
+        // Account for fixed navbar height (approximately 80px)
+        const offsetTop = element.offsetTop - 80;
+        window.scrollTo({ top: offsetTop, behavior: 'smooth' });
+      }
     }
     
     setIsOpen(false);
