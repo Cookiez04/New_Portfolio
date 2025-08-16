@@ -105,7 +105,7 @@ const Contact: React.FC = () => {
 
   const copyEmailToClipboard = async () => {
     try {
-      await navigator.clipboard.writeText('ahmad.zuhairy@example.com');
+      await navigator.clipboard.writeText('kiezzyee@gmail.com');
       setEmailCopied(true);
       toast.success('Email copied to clipboard!');
       setTimeout(() => setEmailCopied(false), 2000);
@@ -149,177 +149,8 @@ const Contact: React.FC = () => {
           </p>
         </motion.div>
 
-        <div className="grid lg:grid-cols-2 gap-12 items-start">
-          {/* Contact Form */}
-          <motion.div
-            initial={{ opacity: 0, x: -30 }}
-            whileInView={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.8 }}
-            viewport={{ once: true }}
-          >
-            <div className="glass-effect p-8 rounded-lg">
-              <div className="flex items-center gap-3 mb-8">
-                <Mail className="w-6 h-6 text-pink-500" />
-                <h3 className="text-2xl font-bold">Send me a message</h3>
-              </div>
-              
-              {isSubmitted ? (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  className="text-center py-12"
-                >
-                  <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
-                  <h4 className="text-2xl font-bold mb-2 text-green-500">Message Sent!</h4>
-                  <p className="text-gray-400 mb-6">
-                    Thanks for reaching out! I'll get back to you within 24 hours.
-                  </p>
-                  <button
-                    onClick={() => setIsSubmitted(false)}
-                    className="btn-secondary"
-                  >
-                    Send Another Message
-                  </button>
-                </motion.div>
-              ) : (
-                <form onSubmit={handleSubmit} className="space-y-6">
-                  {/* Name Field */}
-                  <div>
-                    <label htmlFor="name" className="block text-sm font-medium text-gray-300 mb-2">
-                      Name *
-                    </label>
-                    <div className="relative">
-                      <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                      <input
-                        type="text"
-                        id="name"
-                        name="name"
-                        value={formData.name}
-                        onChange={handleInputChange}
-                        className={`w-full pl-12 pr-4 py-3 bg-gray-800/50 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
-                          errors.name
-                            ? 'border-red-500 focus:ring-red-500'
-                            : 'border-gray-600 focus:border-pink-500 focus:ring-pink-500'
-                        }`}
-                        placeholder="Your name"
-                      />
-                    </div>
-                    {errors.name && (
-                      <p className="mt-1 text-sm text-red-500 flex items-center gap-1">
-                        <AlertCircle className="w-4 h-4" />
-                        {errors.name}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Email Field */}
-                  <div>
-                    <label htmlFor="email" className="block text-sm font-medium text-gray-300 mb-2">
-                      Email *
-                    </label>
-                    <div className="relative">
-                      <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                      <input
-                        type="email"
-                        id="email"
-                        name="email"
-                        value={formData.email}
-                        onChange={handleInputChange}
-                        className={`w-full pl-12 pr-4 py-3 bg-gray-800/50 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
-                          errors.email
-                            ? 'border-red-500 focus:ring-red-500'
-                            : 'border-gray-600 focus:border-pink-500 focus:ring-pink-500'
-                        }`}
-                        placeholder="your.email@example.com"
-                      />
-                    </div>
-                    {errors.email && (
-                      <p className="mt-1 text-sm text-red-500 flex items-center gap-1">
-                        <AlertCircle className="w-4 h-4" />
-                        {errors.email}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Subject Field */}
-                  <div>
-                    <label htmlFor="subject" className="block text-sm font-medium text-gray-300 mb-2">
-                      Subject *
-                    </label>
-                    <input
-                      type="text"
-                      id="subject"
-                      name="subject"
-                      value={formData.subject}
-                      onChange={handleInputChange}
-                      className={`w-full px-4 py-3 bg-gray-800/50 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
-                        errors.subject
-                          ? 'border-red-500 focus:ring-red-500'
-                          : 'border-gray-600 focus:border-pink-500 focus:ring-pink-500'
-                      }`}
-                      placeholder="What's this about?"
-                    />
-                    {errors.subject && (
-                      <p className="mt-1 text-sm text-red-500 flex items-center gap-1">
-                        <AlertCircle className="w-4 h-4" />
-                        {errors.subject}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Message Field */}
-                  <div>
-                    <label htmlFor="message" className="block text-sm font-medium text-gray-300 mb-2">
-                      Message *
-                    </label>
-                    <div className="relative">
-                      <MessageSquare className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
-                      <textarea
-                        id="message"
-                        name="message"
-                        value={formData.message}
-                        onChange={handleInputChange}
-                        rows={6}
-                        className={`w-full pl-12 pr-4 py-3 bg-gray-800/50 border rounded-lg focus:outline-none focus:ring-2 transition-colors resize-none ${
-                          errors.message
-                            ? 'border-red-500 focus:ring-red-500'
-                            : 'border-gray-600 focus:border-pink-500 focus:ring-pink-500'
-                        }`}
-                        placeholder="Tell me about your project, idea, or just say hello!"
-                      />
-                    </div>
-                    {errors.message && (
-                      <p className="mt-1 text-sm text-red-500 flex items-center gap-1">
-                        <AlertCircle className="w-4 h-4" />
-                        {errors.message}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Submit Button */}
-                  <button
-                    type="submit"
-                    disabled={isSubmitting}
-                    className="w-full btn-primary flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isSubmitting ? (
-                      <>
-                        <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                        Sending...
-                      </>
-                    ) : (
-                      <>
-                        <Send className="w-5 h-5" />
-                        Send Message
-                      </>
-                    )}
-                  </button>
-                </form>
-              )}
-            </div>
-          </motion.div>
-
-          {/* Contact Info & Social */}
+        {/* Contact Info & Social */}
+        <div className="max-w-2xl mx-auto">
           <motion.div
             initial={{ opacity: 0, x: 30 }}
             whileInView={{ opacity: 1, x: 0 }}
@@ -338,7 +169,7 @@ const Contact: React.FC = () => {
                   <div className="flex-1">
                     <p className="text-gray-400 text-sm">Email</p>
                     <div className="flex items-center gap-2">
-                      <span className="text-white">ahmad.zuhairy@example.com</span>
+                      <span className="text-white">kiezzyee@gmail.com</span>
                       <button
                         onClick={copyEmailToClipboard}
                         className="p-1 rounded hover:bg-gray-700 transition-colors group"

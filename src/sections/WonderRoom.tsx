@@ -50,8 +50,55 @@ const CreativeLab: React.FC = () => {
     isPlaying: false
   });
   const [showMemoryModal, setShowMemoryModal] = useState(false);
-  const [codeInput, setCodeInput] = useState<string>('// Welcome to the Interactive Code Playground!\n// Try running some JavaScript code\n\nfunction fibonacci(n) {\n  if (n <= 1) return n;\n  return fibonacci(n - 1) + fibonacci(n - 2);\n}\n\nconsole.log("Fibonacci of 10:", fibonacci(10));');
-  const [codeOutput, setCodeOutput] = useState<string[]>(['Welcome to the Interactive Code Playground!', 'Click "Run Code" to execute your JavaScript.', '']);
+  // Sound Synthesizer State
+  const [audioContext, setAudioContext] = useState<AudioContext | null>(null);
+  const [masterGain, setMasterGain] = useState<GainNode | null>(null);
+  const [isAudioInitialized, setIsAudioInitialized] = useState(false);
+  const [activeNotes, setActiveNotes] = useState<Map<string, {
+    oscillator: OscillatorNode;
+    gainNode: GainNode;
+    filterNode: BiquadFilterNode;
+  }>>(new Map());
+  
+  // Oscillator Settings
+  const [oscillatorSettings, setOscillatorSettings] = useState({
+    waveform: 'sine' as OscillatorType,
+    frequency: 440,
+    detune: 0,
+    volume: 0.3
+  });
+  
+  // Filter Settings
+  const [filterSettings, setFilterSettings] = useState({
+    type: 'lowpass' as BiquadFilterType,
+    frequency: 1000,
+    Q: 1,
+    gain: 0
+  });
+  
+  // Envelope Settings (ADSR)
+  const [envelopeSettings, setEnvelopeSettings] = useState({
+    attack: 0.1,
+    decay: 0.3,
+    sustain: 0.7,
+    release: 0.5
+  });
+  
+  // Effects Settings
+  const [effectsSettings, setEffectsSettings] = useState({
+    reverbEnabled: false,
+    reverbAmount: 0.3,
+    delayEnabled: false,
+    delayTime: 0.3,
+    delayFeedback: 0.4,
+    distortionEnabled: false,
+    distortionAmount: 20
+  });
+  
+  // UI State
+  const [currentOctave, setCurrentOctave] = useState(4);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [selectedPreset, setSelectedPreset] = useState('default');
 
   // Interactive functions
   const typeWriter = async (text: string, callback: (char: string) => void) => {
@@ -128,52 +175,206 @@ const CreativeLab: React.FC = () => {
     }
   };
 
-  // Code Playground Functions
-  const executeCode = () => {
-    const output: string[] = [];
-    const originalConsoleLog = console.log;
-    
-    // Override console.log to capture output
-    console.log = (...args: any[]) => {
-      output.push(args.map(arg => 
-        typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
-      ).join(' '));
-    };
+  // Audio Context and Synthesizer Functions
+  const initializeAudio = React.useCallback(async () => {
+    if (isAudioInitialized) return;
     
     try {
-      // Create a function to execute the code safely
-      const func = new Function(codeInput);
-      func();
+      const context = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const gain = context.createGain();
+      gain.gain.value = 0.5;
+      gain.connect(context.destination);
       
-      if (output.length === 0) {
-        output.push('Code executed successfully (no output)');
-      }
+      setAudioContext(context);
+      setMasterGain(gain);
+      setIsAudioInitialized(true);
     } catch (error) {
-      output.push(`Error: ${error instanceof Error ? error.message : String(error)}`);
-    } finally {
-      // Restore original console.log
-      console.log = originalConsoleLog;
+      console.error('Failed to initialize audio context:', error);
     }
-    
-    setCodeOutput(prev => [...prev, '> Running code...', ...output, '']);
+  }, [isAudioInitialized]);
+  
+  const noteToFrequency = (note: string, octave: number): number => {
+    const noteMap: { [key: string]: number } = {
+      'C': 0, 'C#': 1, 'D': 2, 'D#': 3, 'E': 4, 'F': 5,
+      'F#': 6, 'G': 7, 'G#': 8, 'A': 9, 'A#': 10, 'B': 11
+    };
+    const noteNumber = noteMap[note];
+    return 440 * Math.pow(2, (octave - 4) + (noteNumber - 9) / 12);
   };
   
-  const loadExample = (example: string) => {
-    const examples: { [key: string]: string } = {
-      fibonacci: `// Fibonacci Sequence\nfunction fibonacci(n) {\n  if (n <= 1) return n;\n  return fibonacci(n - 1) + fibonacci(n - 2);\n}\n\nfor (let i = 0; i < 10; i++) {\n  console.log(\`Fibonacci(\${i}) = \${fibonacci(i)}\`);
-}`,
-      factorial: `// Factorial Function\nfunction factorial(n) {\n  if (n <= 1) return 1;\n  return n * factorial(n - 1);\n}\n\nconsole.log('Factorial of 5:', factorial(5));\nconsole.log('Factorial of 8:', factorial(8));`,
-      sorting: `// Bubble Sort Algorithm\nfunction bubbleSort(arr) {\n  const sorted = [...arr];\n  for (let i = 0; i < sorted.length; i++) {\n    for (let j = 0; j < sorted.length - i - 1; j++) {\n      if (sorted[j] > sorted[j + 1]) {\n        [sorted[j], sorted[j + 1]] = [sorted[j + 1], sorted[j]];\n      }\n    }\n  }\n  return sorted;\n}\n\nconst numbers = [64, 34, 25, 12, 22, 11, 90];\nconsole.log('Original:', numbers);\nconsole.log('Sorted:', bubbleSort(numbers));`,
-      palindrome: `// Palindrome Checker\nfunction isPalindrome(str) {\n  const cleaned = str.toLowerCase().replace(/[^a-z0-9]/g, '');\n  return cleaned === cleaned.split('').reverse().join('');\n}\n\nconst testWords = ['racecar', 'hello', 'A man a plan a canal Panama'];\ntestWords.forEach(word => {\n  console.log(\`"\${word}" is \${isPalindrome(word) ? '' : 'not '}a palindrome\`);
-});`
+  const playNote = React.useCallback((note: string, octave: number = currentOctave) => {
+    if (!audioContext || !masterGain) return;
+    
+    const noteKey = `${note}${octave}`;
+    if (activeNotes.has(noteKey)) return;
+    
+    const frequency = noteToFrequency(note, octave);
+    
+    // Create oscillator
+    const oscillator = audioContext.createOscillator();
+    oscillator.type = oscillatorSettings.waveform;
+    oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
+    oscillator.detune.setValueAtTime(oscillatorSettings.detune, audioContext.currentTime);
+    
+    // Create gain node for envelope
+    const gainNode = audioContext.createGain();
+    gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+    
+    // Create filter
+    const filterNode = audioContext.createBiquadFilter();
+    filterNode.type = filterSettings.type;
+    filterNode.frequency.setValueAtTime(filterSettings.frequency, audioContext.currentTime);
+    filterNode.Q.setValueAtTime(filterSettings.Q, audioContext.currentTime);
+    
+    // Connect nodes
+    oscillator.connect(filterNode);
+    filterNode.connect(gainNode);
+    gainNode.connect(masterGain);
+    
+    // Apply envelope (Attack)
+    const now = audioContext.currentTime;
+    const attackTime = envelopeSettings.attack;
+    const decayTime = envelopeSettings.decay;
+    const sustainLevel = envelopeSettings.sustain * oscillatorSettings.volume;
+    
+    gainNode.gain.linearRampToValueAtTime(oscillatorSettings.volume, now + attackTime);
+    gainNode.gain.linearRampToValueAtTime(sustainLevel, now + attackTime + decayTime);
+    
+    oscillator.start();
+    
+    setActiveNotes(prev => new Map(prev.set(noteKey, { oscillator, gainNode, filterNode })));
+  }, [audioContext, masterGain, currentOctave, oscillatorSettings, filterSettings, envelopeSettings, activeNotes]);
+  
+  const stopNote = React.useCallback((note: string, octave: number = currentOctave) => {
+    const noteKey = `${note}${octave}`;
+    const noteData = activeNotes.get(noteKey);
+    
+    if (!noteData || !audioContext) return;
+    
+    const { oscillator, gainNode } = noteData;
+    const now = audioContext.currentTime;
+    const releaseTime = envelopeSettings.release;
+    
+    // Apply release envelope
+    gainNode.gain.cancelScheduledValues(now);
+    gainNode.gain.setValueAtTime(gainNode.gain.value, now);
+    gainNode.gain.linearRampToValueAtTime(0, now + releaseTime);
+    
+    oscillator.stop(now + releaseTime);
+    
+    setActiveNotes(prev => {
+      const newMap = new Map(prev);
+      newMap.delete(noteKey);
+      return newMap;
+    });
+  }, [audioContext, currentOctave, envelopeSettings, activeNotes]);
+  
+  const stopAllNotes = React.useCallback(() => {
+    activeNotes.forEach((noteData, noteKey) => {
+      const note = noteKey.slice(0, -1);
+      const octave = parseInt(noteKey.slice(-1));
+      stopNote(note, octave);
+    });
+  }, [activeNotes, stopNote]);
+  
+  const loadPreset = (presetName: string) => {
+    const presets: { [key: string]: any } = {
+      default: {
+        oscillator: { waveform: 'sine', volume: 0.3, detune: 0 },
+        filter: { type: 'lowpass', frequency: 1000, Q: 1 },
+        envelope: { attack: 0.1, decay: 0.3, sustain: 0.7, release: 0.5 }
+      },
+      bass: {
+        oscillator: { waveform: 'sawtooth', volume: 0.4, detune: 0 },
+        filter: { type: 'lowpass', frequency: 300, Q: 2 },
+        envelope: { attack: 0.05, decay: 0.2, sustain: 0.8, release: 0.3 }
+      },
+      lead: {
+        oscillator: { waveform: 'square', volume: 0.3, detune: 5 },
+        filter: { type: 'lowpass', frequency: 2000, Q: 3 },
+        envelope: { attack: 0.02, decay: 0.1, sustain: 0.6, release: 0.8 }
+      },
+      pad: {
+        oscillator: { waveform: 'sine', volume: 0.2, detune: 0 },
+        filter: { type: 'lowpass', frequency: 800, Q: 0.5 },
+        envelope: { attack: 0.5, decay: 0.8, sustain: 0.9, release: 1.2 }
+      }
     };
     
-    setCodeInput(examples[example] || examples.fibonacci);
+    const preset = presets[presetName];
+    if (preset) {
+      setOscillatorSettings(prev => ({ ...prev, ...preset.oscillator }));
+      setFilterSettings(prev => ({ ...prev, ...preset.filter }));
+      setEnvelopeSettings(prev => ({ ...prev, ...preset.envelope }));
+      setSelectedPreset(presetName);
+    }
   };
   
-  const clearOutput = () => {
-    setCodeOutput(['Console cleared.', '']);
-  };
+  // Audio initialization on component mount
+  React.useEffect(() => {
+    // Auto-initialize audio context when component mounts
+    const handleUserInteraction = () => {
+      initializeAudio();
+      document.removeEventListener('click', handleUserInteraction);
+      document.removeEventListener('keydown', handleUserInteraction);
+    };
+    
+    document.addEventListener('click', handleUserInteraction);
+    document.addEventListener('keydown', handleUserInteraction);
+    
+    return () => {
+      document.removeEventListener('click', handleUserInteraction);
+      document.removeEventListener('keydown', handleUserInteraction);
+    };
+  }, [initializeAudio]);
+  
+  // Keyboard event handling for virtual keyboard
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!isAudioInitialized) return;
+      
+      const keyMap: { [key: string]: string } = {
+        'a': 'C', 'w': 'C#', 's': 'D', 'e': 'D#', 'd': 'E', 'f': 'F',
+        't': 'F#', 'g': 'G', 'y': 'G#', 'h': 'A', 'u': 'A#', 'j': 'B'
+      };
+      
+      const note = keyMap[e.key.toLowerCase()];
+      if (note && !e.repeat) {
+        playNote(note);
+      }
+    };
+    
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (!isAudioInitialized) return;
+      
+      const keyMap: { [key: string]: string } = {
+        'a': 'C', 'w': 'C#', 's': 'D', 'e': 'D#', 'd': 'E', 'f': 'F',
+        't': 'F#', 'g': 'G', 'y': 'G#', 'h': 'A', 'u': 'A#', 'j': 'B'
+      };
+      
+      const note = keyMap[e.key.toLowerCase()];
+      if (note) {
+        stopNote(note);
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [isAudioInitialized, playNote, stopNote]);
+  
+  // Cleanup audio context on unmount
+  React.useEffect(() => {
+    return () => {
+      if (audioContext && audioContext.state !== 'closed') {
+        audioContext.close();
+      }
+    };
+  }, [audioContext]);
 
   // Memory Game Functions
   const MEMORY_SYMBOLS = ['🎮', '🎯', '🎲', '🎪', '🎨', '🎭', '🎸', '🎺'];
@@ -909,9 +1110,9 @@ const CreativeLab: React.FC = () => {
 
   const labFeatures = [
     {id: 'playground',
-      title: 'Code Playground',
-      description: 'Interactive JavaScript playground with live code execution and examples.',
-      icon: <Code className="w-6 h-6" />,
+      title: 'Sound Synthesizer',
+      description: 'Interactive audio synthesis with oscillators, filters, and real-time effects.',
+      icon: <Sparkles className="w-6 h-6" />,
       color: 'from-blue-500 to-cyan-500'
     },
     {
@@ -992,77 +1193,220 @@ const CreativeLab: React.FC = () => {
         >
           {activeTab === 'playground' && (
             <div className="space-y-6">
-              <div className="flex flex-wrap gap-4 justify-center mb-6">
-                <select
-                  onChange={(e) => loadExample(e.target.value)}
-                  className="px-4 py-2 bg-gray-800 text-white rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none"
-                  defaultValue=""
-                >
-                  <option value="" disabled>Load Example</option>
-                  <option value="fibonacci">Fibonacci Sequence</option>
-                  <option value="factorial">Factorial Function</option>
-                  <option value="sorting">Bubble Sort</option>
-                  <option value="palindrome">Palindrome Checker</option>
-                </select>
-                
-                <button
-                  onClick={executeCode}
-                  className="px-6 py-2 bg-gradient-to-r from-blue-500 to-cyan-500 text-white rounded-lg hover:from-blue-600 hover:to-cyan-600 transition-all duration-300 font-medium shadow-lg hover:shadow-xl transform hover:scale-105 flex items-center gap-2"
-                >
-                  <Play className="w-4 h-4" />
-                  Run Code
-                </button>
-                
-                <button
-                  onClick={clearOutput}
-                  className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors flex items-center gap-2"
-                >
-                  <Trash2 className="w-4 h-4" />
-                  Clear Output
-                </button>
+              <div className="text-center mb-6">
+                <h3 className="text-2xl font-bold text-blue-400 mb-4">Sound Synthesizer</h3>
+                <p className="text-gray-400 text-sm">Create and manipulate sounds with oscillators, filters, and effects</p>
               </div>
               
-              <div className="grid lg:grid-cols-2 gap-6">
-                {/* Code Editor */}
-                <div className="space-y-3">
+              <div className="flex flex-wrap gap-4 justify-center mb-6">
+                <button
+                  onClick={initializeAudio}
+                  disabled={isAudioInitialized}
+                  className={`px-6 py-2 rounded-lg transition-all duration-300 font-medium shadow-lg hover:shadow-xl transform hover:scale-105 flex items-center gap-2 ${
+                    isAudioInitialized 
+                      ? 'bg-green-600 text-white cursor-not-allowed' 
+                      : 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white hover:from-blue-600 hover:to-cyan-600'
+                  }`}
+                >
+                  <Sparkles className="w-4 h-4" />
+                  {isAudioInitialized ? 'Audio Ready' : 'Initialize Audio'}
+                </button>
+                
+                <button
+                  onClick={stopAllNotes}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2"
+                >
+                  <Square className="w-4 h-4" />
+                  Stop All
+                </button>
+                
+                <select
+                  value={selectedPreset}
+                  onChange={(e) => loadPreset(e.target.value)}
+                  className="px-4 py-2 bg-gray-800 text-white rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none"
+                >
+                  <option value="default">Default</option>
+                  <option value="bass">Bass</option>
+                  <option value="lead">Lead</option>
+                  <option value="pad">Pad</option>
+                </select>
+              </div>
+              
+              <div className="grid lg:grid-cols-4 gap-6">
+                {/* Virtual Keyboard */}
+                <div className="lg:col-span-2 space-y-3">
                   <div className="flex items-center gap-2 text-blue-400">
-                    <Code className="w-5 h-5" />
-                    <h4 className="font-semibold">Code Editor</h4>
+                    <Sparkles className="w-5 h-5" />
+                    <h4 className="font-semibold">Virtual Keyboard</h4>
                   </div>
-                  <textarea
-                    value={codeInput}
-                    onChange={(e) => setCodeInput(e.target.value)}
-                    className="w-full h-80 bg-gray-900 text-white p-4 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none font-mono text-sm resize-none"
-                    placeholder="Write your JavaScript code here..."
-                    spellCheck={false}
-                  />
+                  <div className="bg-gray-900 rounded-lg p-4 border border-gray-600">
+                    <div className="flex items-center justify-between mb-4">
+                      <span className="text-sm text-gray-400">Octave: {currentOctave}</span>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setCurrentOctave(Math.max(1, currentOctave - 1))}
+                          className="px-2 py-1 bg-gray-700 text-white rounded text-sm hover:bg-gray-600"
+                        >
+                          -
+                        </button>
+                        <button
+                          onClick={() => setCurrentOctave(Math.min(7, currentOctave + 1))}
+                          className="px-2 py-1 bg-gray-700 text-white rounded text-sm hover:bg-gray-600"
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'].map((note) => (
+                        <button
+                          key={note}
+                          onMouseDown={() => playNote(note)}
+                          onMouseUp={() => stopNote(note)}
+                          onMouseLeave={() => stopNote(note)}
+                          className={`px-3 py-6 rounded text-sm font-medium transition-all ${
+                            note.includes('#') 
+                              ? 'bg-gray-800 text-white hover:bg-gray-700 border border-gray-600' 
+                              : 'bg-white text-gray-900 hover:bg-gray-100 border border-gray-300'
+                          } ${activeNotes.has(`${note}${currentOctave}`) ? 'ring-2 ring-blue-400' : ''}`}
+                        >
+                          {note}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
                 
-                {/* Output Console */}
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2 text-green-400">
-                    <Terminal className="w-5 h-5" />
-                    <h4 className="font-semibold">Output Console</h4>
+                {/* Oscillator Controls */}
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2 text-purple-400">
+                    <Zap className="w-5 h-5" />
+                    <h4 className="font-semibold">Oscillator</h4>
                   </div>
-                  <div className="bg-gray-900 rounded-lg p-4 h-80 overflow-y-auto font-mono text-sm">
-                    <div className="space-y-1">
-                      {codeOutput.map((line, index) => (
-                        <div key={index} className={`${
-                          line.startsWith('> Running') ? 'text-blue-400' :
-                          line.startsWith('Error:') ? 'text-red-400' :
-                          'text-gray-300'
-                        }`}>
-                          {line}
-                        </div>
-                      ))}
+                  
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm text-gray-400 mb-1">Waveform</label>
+                      <select
+                        value={oscillatorSettings.waveform}
+                        onChange={(e) => setOscillatorSettings(prev => ({ ...prev, waveform: e.target.value as OscillatorType }))}
+                        className="w-full px-3 py-2 bg-gray-800 text-white rounded border border-gray-600 focus:border-blue-500 focus:outline-none text-sm"
+                      >
+                        <option value="sine">Sine</option>
+                        <option value="square">Square</option>
+                        <option value="sawtooth">Sawtooth</option>
+                        <option value="triangle">Triangle</option>
+                      </select>
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm text-gray-400 mb-1">Volume: {oscillatorSettings.volume.toFixed(2)}</label>
+                      <input
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.01"
+                        value={oscillatorSettings.volume}
+                        onChange={(e) => setOscillatorSettings(prev => ({ ...prev, volume: parseFloat(e.target.value) }))}
+                        className="w-full"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm text-gray-400 mb-1">Detune: {oscillatorSettings.detune}</label>
+                      <input
+                        type="range"
+                        min="-50"
+                        max="50"
+                        step="1"
+                        value={oscillatorSettings.detune}
+                        onChange={(e) => setOscillatorSettings(prev => ({ ...prev, detune: parseInt(e.target.value) }))}
+                        className="w-full"
+                      />
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Filter & Envelope Controls */}
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2 text-green-400">
+                    <Brain className="w-5 h-5" />
+                    <h4 className="font-semibold">Filter & Envelope</h4>
+                  </div>
+                  
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm text-gray-400 mb-1">Filter Type</label>
+                      <select
+                        value={filterSettings.type}
+                        onChange={(e) => setFilterSettings(prev => ({ ...prev, type: e.target.value as BiquadFilterType }))}
+                        className="w-full px-3 py-2 bg-gray-800 text-white rounded border border-gray-600 focus:border-blue-500 focus:outline-none text-sm"
+                      >
+                        <option value="lowpass">Low Pass</option>
+                        <option value="highpass">High Pass</option>
+                        <option value="bandpass">Band Pass</option>
+                        <option value="notch">Notch</option>
+                      </select>
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm text-gray-400 mb-1">Cutoff: {filterSettings.frequency}Hz</label>
+                      <input
+                        type="range"
+                        min="20"
+                        max="20000"
+                        step="10"
+                        value={filterSettings.frequency}
+                        onChange={(e) => setFilterSettings(prev => ({ ...prev, frequency: parseInt(e.target.value) }))}
+                        className="w-full"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm text-gray-400 mb-1">Resonance: {filterSettings.Q.toFixed(1)}</label>
+                      <input
+                        type="range"
+                        min="0.1"
+                        max="10"
+                        step="0.1"
+                        value={filterSettings.Q}
+                        onChange={(e) => setFilterSettings(prev => ({ ...prev, Q: parseFloat(e.target.value) }))}
+                        className="w-full"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm text-gray-400 mb-1">Attack: {envelopeSettings.attack.toFixed(2)}s</label>
+                      <input
+                        type="range"
+                        min="0.01"
+                        max="2"
+                        step="0.01"
+                        value={envelopeSettings.attack}
+                        onChange={(e) => setEnvelopeSettings(prev => ({ ...prev, attack: parseFloat(e.target.value) }))}
+                        className="w-full"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm text-gray-400 mb-1">Release: {envelopeSettings.release.toFixed(2)}s</label>
+                      <input
+                        type="range"
+                        min="0.01"
+                        max="3"
+                        step="0.01"
+                        value={envelopeSettings.release}
+                        onChange={(e) => setEnvelopeSettings(prev => ({ ...prev, release: parseFloat(e.target.value) }))}
+                        className="w-full"
+                      />
                     </div>
                   </div>
                 </div>
               </div>
               
               <div className="text-center text-sm text-gray-400">
-                <p>Interactive JavaScript playground with live execution</p>
-                <p className="mt-1">Try the examples or write your own code to see it in action!</p>
+                <p>Interactive sound synthesizer with real-time audio generation</p>
+                <p className="mt-1">Click and hold keys to play notes, adjust parameters to shape your sound!</p>
               </div>
             </div>
           )}
