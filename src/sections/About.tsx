@@ -156,12 +156,12 @@ const About: React.FC = () => {
             >
               <div className="relative w-64 h-64 group">
                 <img 
-                  src="/src/assets/Mascot/Whisk_cd93094613 - Edited.png" 
+                  src="/mascot.png" 
                   alt="Kiezz Cookie Mascot" 
                   className="w-64 h-64 object-contain hover:scale-110 transition-all duration-300 group-hover:opacity-0"
                 />
                 <img 
-                  src="/src/assets/Mascot/shocked_hover.png" 
+                  src="/shocked_hover.png" 
                   alt="Shocked Kiezz Cookie Mascot" 
                   className="absolute top-0 left-0 w-64 h-64 object-contain hover:scale-110 transition-all duration-300 opacity-0 group-hover:opacity-100"
                 />
